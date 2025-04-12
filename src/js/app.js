@@ -2,6 +2,7 @@
  * Entry point of app: don't change this
  */
 
+import '../css/style.css'
 import GamePlay from './GamePlay.js'
 import GameController from './GameController.js'
 import GameStateService from './GameStateService.js'

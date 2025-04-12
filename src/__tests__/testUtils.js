@@ -1,5 +1,4 @@
-// utils.test.js
-import {calcTileType} from './utils'
+import {calcTileType} from '../js/utils'
 
 describe('calcTileType', () => {
   it('returns correct type for top-left corner', () => {

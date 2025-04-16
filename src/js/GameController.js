@@ -1,4 +1,5 @@
 import themes from './themes.js'
+import GamePlay from './GamePlay.js'
 import {generateTeam} from './generators.js'
 import Bowman from './characters/Bowman.js'
 import Swordsman from './characters/Swordsman.js'
@@ -36,17 +37,17 @@ export default class GameController {
     const playerPositions = [0, 1, 8, 9];
     const enemyPositions = [6, 7, 14, 15];
 
-    const positionedCharacters = [];
+    this.positionedCharacters = [];
 
     this.playerTeam.characters.forEach((character, index) => {
-      positionedCharacters.push(new PositionedCharacter(character, playerPositions[index]));
+      this.positionedCharacters.push(new PositionedCharacter(character, playerPositions[index]));
     });
 
     this.enemyTeam.characters.forEach((character, index) => {
-      positionedCharacters.push(new PositionedCharacter(character, enemyPositions[index]));
+      this.positionedCharacters.push(new PositionedCharacter(character, enemyPositions[index]));
     });
 
-    this.gamePlay.redrawPositions(positionedCharacters);
+    this.gamePlay.redrawPositions(this.positionedCharacters);
   }
 
   getCharacterInfo(character) {
@@ -109,7 +110,7 @@ export default class GameController {
       if (distance <= this.getMoveRange(this.selectedCharacter.character)) {
       } else if (this.canAttack(this.selectedCharacter, index)) {
       } else {
-        this.gamePlay.showError('Недопустимое действие');
+        GamePlay.showError('Недопустимое действие');
       }
     }
   }

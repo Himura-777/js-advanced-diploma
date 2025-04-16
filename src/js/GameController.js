@@ -18,6 +18,7 @@ export default class GameController {
     this.enemyTeam = null;
     this.positionedCharacters = [];
     this.selectedCharacter = null;
+    this.currentTurn = 'player';
   }
 
   init() {
@@ -94,11 +95,32 @@ export default class GameController {
     return Math.max(Math.abs(x1 - x2), Math.abs(y1 - y2));
   }
 
-  onCellClick(index) {
-    // TODO: react to click
+  isCellFree(index) {
+    return !this.positionedCharacters.some(pc => pc.position === index);
+  }
+
+  calculateDamage(attacker, target) {
+    return Math.max(
+      attacker.character.attack - target.character.defence,
+      attacker.character.attack * 0.1
+    );
+  }
+
+  async onCellClick(index) {
+    if (this.currentTurn !== 'player') return;
+
     const positionedCharacter = this.positionedCharacters.find(pc => pc.position === index);
 
     if (positionedCharacter && this.isPlayerCharacter(positionedCharacter.character)) {
+      if (this.selectedCharacter?.position === positionedCharacter.position) {
+        this.gamePlay.deselectCell(this.selectedCharacter.position);
+        this.selectedCharacter = null;
+        return;
+      }
+
+      if (this.selectedCharacter) {
+        this.gamePlay.deselectCell(this.selectedCharacter.position);
+      }
       this.selectedCharacter = positionedCharacter;
       this.gamePlay.selectCell(index, 'yellow');
       return;
@@ -106,11 +128,51 @@ export default class GameController {
 
     if (this.selectedCharacter) {
       const distance = this.getDistance(this.selectedCharacter.position, index);
+      const moveRange = this.getMoveRange(this.selectedCharacter.character);
 
-      if (distance <= this.getMoveRange(this.selectedCharacter.character)) {
-      } else if (this.canAttack(this.selectedCharacter, index)) {
-      } else {
-        GamePlay.showError('Недопустимое действие');
+      if (distance <= moveRange && this.isCellFree(index)) {
+        const oldPosition = this.selectedCharacter.position;
+        this.selectedCharacter.position = index;
+
+        this.gamePlay.deselectCell(oldPosition);
+        this.selectedCharacter = null;
+
+        this.gamePlay.redrawPositions(this.positionedCharacters);
+
+        this.currentTurn = 'computer';
+        await this.computerTurn();
+      }
+      else if (this.canAttack(this.selectedCharacter, index)) {
+        const target = this.positionedCharacters.find(pc => pc.position === index);
+
+        const damage = this.calculateDamage(this.selectedCharacter, target);
+
+        try {
+          await this.gamePlay.showDamage(index, damage);
+
+          target.character.health -= damage;
+
+          if (target.character.health <= 0) {
+            this.positionedCharacters = this.positionedCharacters.filter(
+              pc => pc !== target
+            );
+          }
+
+          this.gamePlay.redrawPositions(this.positionedCharacters);
+
+          this.gamePlay.deselectCell(this.selectedCharacter.position);
+          this.selectedCharacter = null;
+
+          this.currentTurn = 'computer';
+          await this.computerTurn();
+
+        } catch (error) {
+          console.error('Ошибка при атаке:', error);
+          GamePlay.showError('Ошибка при атаке');
+        }
+      }
+      else {
+        GamePlay.showError('Невозможно выполнить это действие');
       }
     }
   }
@@ -124,7 +186,6 @@ export default class GameController {
   }
 
   onCellEnter(index) {
-    // TODO: react to mouse enter
     const positionedCharacter = this.positionedCharacters.find(pc => pc.position === index);
 
     if (positionedCharacter) {
@@ -136,7 +197,7 @@ export default class GameController {
       const distance = this.getDistance(this.selectedCharacter.position, index);
       const moveRange = this.getMoveRange(this.selectedCharacter.character);
 
-      if (!positionedCharacter && distance <= moveRange) {
+      if (!positionedCharacter && distance <= moveRange && this.isCellFree(index)) {
         this.gamePlay.selectCell(index, 'green');
         this.gamePlay.setCursor(cursors.pointer);
       }
@@ -163,6 +224,62 @@ export default class GameController {
   isPlayerCharacter(character) {
     const playerTypes = ['bowman', 'swordsman', 'magician'];
     return playerTypes.includes(character.type);
+  }
+
+  async computerTurn() {
+    const computerCharacters = this.positionedCharacters.filter(
+      pc => !this.isPlayerCharacter(pc.character)
+    );
+
+    const playerCharacters = this.positionedCharacters.filter(
+      pc => this.isPlayerCharacter(pc.character)
+    );
+
+    if (playerCharacters.length === 0 || computerCharacters.length === 0) {
+      this.currentTurn = 'player';
+      return;
+    }
+
+    const attacker = computerCharacters[
+      Math.floor(Math.random() * computerCharacters.length)
+      ];
+
+    let bestTarget = null;
+    let minDistance = Infinity;
+    let minHealth = Infinity;
+
+    playerCharacters.forEach(target => {
+      const distance = this.getDistance(attacker.position, target.position);
+      const inRange = distance <= this.getAttackRange(attacker.character);
+
+      if (inRange && (distance < minDistance ||
+        (distance === minDistance && target.character.health < minHealth))) {
+        bestTarget = target;
+        minDistance = distance;
+        minHealth = target.character.health;
+      }
+    });
+
+    if (bestTarget) {
+      const damage = this.calculateDamage(attacker, bestTarget);
+
+      try {
+        await this.gamePlay.showDamage(bestTarget.position, damage);
+        bestTarget.character.health -= damage;
+
+        if (bestTarget.character.health <= 0) {
+          this.positionedCharacters = this.positionedCharacters.filter(
+            pc => pc !== bestTarget
+          );
+        }
+
+        this.gamePlay.redrawPositions(this.positionedCharacters);
+      } catch (error) {
+        console.error('Ошибка при атаке компьютера:', error);
+      }
+    }
+
+    this.currentTurn = 'player';
   }
 }
 

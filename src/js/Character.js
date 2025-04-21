@@ -14,6 +14,10 @@
  */
 export default class Character {
   constructor(level, type = 'generic') {
+    if (new.target === Character) {
+      throw new Error('Cannot instantiate Character directly');
+    }
+
     this.level = level;
     this.attack = 0;
     this.defence = 0;
@@ -21,10 +25,6 @@ export default class Character {
     this.type = type;
     
     // TODO: выбросите исключение, если кто-то использует "new Character()"
-    if (new.target === Character) {
-      throw new Error('Cannot instantiate Character directly');
-    }
-
     for (let i = 1; i < level; i++) {
       this.levelUp();
     }

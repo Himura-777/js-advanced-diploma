@@ -4,7 +4,9 @@ export default class GameState {
     return {
       maxScore: object?.maxScore || 0,
       currentLevel: object?.currentLevel || 1,
-      theme: object?.theme || 'prairie'
+      theme: object?.theme || 'prairie',
+      positionedCharacters: object?.positionedCharacters || [],
+      currentTurn: object?.currentTurn || 'player',
     };
   }
 }

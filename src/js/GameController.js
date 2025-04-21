@@ -27,14 +27,30 @@ export default class GameController {
   }
 
   init() {
-    // Добавлено: загрузка рекорда
     try {
       const savedState = this.stateService.load();
-      this.maxScore = savedState?.maxScore || 0;
+      if (savedState) {
+        this.maxScore = savedState.maxScore;
+        this.currentLevel = savedState.currentLevel;
+        this.currentTurn = savedState.currentTurn;
+        this.positionedCharacters = savedState.positionedCharacters || [];
+
+        const themeIndex = (this.currentLevel - 1) % this.themes.length;
+        this.gamePlay.drawUi(themes[this.themes[themeIndex]]);
+
+        if (this.positionedCharacters.length > 0) {
+          this.gamePlay.redrawPositions(this.positionedCharacters);
+          return;
+        }
+      }
     } catch (e) {
       console.error('Failed to load state:', e);
     }
 
+    this.newGame();
+  }
+
+  newGame() {
     this.gamePlay.drawUi(themes.prairie);
     this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
     this.gamePlay.addCellLeaveListener(this.onCellLeave.bind(this));
@@ -71,14 +87,18 @@ export default class GameController {
     this.isGameOver = false;
     this.currentLevel = 1;
     this.currentTurn = 'player';
-    this.init();
+    this.positionedCharacters = [];
+    this.newGame();
   }
 
   saveGameState() {
-    this.stateService.save({
+    const state = {
       maxScore: this.maxScore,
-      currentLevel: this.currentLevel
-    });
+      currentLevel: this.currentLevel,
+      currentTurn: this.currentTurn,
+      positionedCharacters: this.positionedCharacters,
+    };
+    this.stateService.save(state);
   }
 
   lockGameBoard() {

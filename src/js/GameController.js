@@ -19,16 +19,27 @@ export default class GameController {
     this.positionedCharacters = [];
     this.selectedCharacter = null;
     this.currentTurn = 'player';
+    this.currentLevel = 1;
+    this.maxScore = 0;
+    this.isGameOver = false;
+    this.themes = ['prairie', 'desert', 'arctic', 'mountain'];
+    this.gamePlay.addNewGameListener(this.onNewGame.bind(this));
   }
 
   init() {
+    // Добавлено: загрузка рекорда
+    try {
+      const savedState = this.stateService.load();
+      this.maxScore = savedState?.maxScore || 0;
+    } catch (e) {
+      console.error('Failed to load state:', e);
+    }
+
     this.gamePlay.drawUi(themes.prairie);
-    // TODO: add event listeners to gamePlay events
     this.gamePlay.addCellEnterListener(this.onCellEnter.bind(this));
     this.gamePlay.addCellLeaveListener(this.onCellLeave.bind(this));
     this.gamePlay.addCellClickListener(this.onCellClick.bind(this));
 
-    // TODO: load saved stated from stateService
     const playerTypes = [Bowman, Swordsman, Magician];
     const enemyTypes = [Vampire, Undead, Daemon];
 
@@ -51,12 +62,82 @@ export default class GameController {
     this.gamePlay.redrawPositions(this.positionedCharacters);
   }
 
+  onNewGame() {
+    this.saveGameState();
+    this.resetGame();
+  }
+
+  resetGame() {
+    this.isGameOver = false;
+    this.currentLevel = 1;
+    this.currentTurn = 'player';
+    this.init();
+  }
+
+  saveGameState() {
+    this.stateService.save({
+      maxScore: this.maxScore,
+      currentLevel: this.currentLevel
+    });
+  }
+
+  lockGameBoard() {
+    this.gamePlay.setCursor('not-allowed');
+    this.gamePlay.addCellClickListener(() => {
+    });
+    this.gamePlay.addCellEnterListener(() => {
+    });
+    this.gamePlay.addCellLeaveListener(() => {
+    });
+  }
+
+  calculateScore() {
+    let score = this.currentLevel * 100;
+    this.positionedCharacters
+      .filter(pc => this.isPlayerCharacter(pc.character))
+      .forEach(pc => {
+        score += pc.character.level * 50 + pc.character.health;
+      });
+    return score;
+  }
+
+  async checkRoundEnd() {
+    const enemiesAlive = this.positionedCharacters.some(
+      pc => !this.isPlayerCharacter(pc.character)
+    );
+    const playersAlive = this.positionedCharacters.some(
+      pc => this.isPlayerCharacter(pc.character)
+    );
+
+    if (!enemiesAlive) {
+      this.maxScore = Math.max(this.maxScore, this.calculateScore());
+
+      if (this.currentLevel < 4) {
+        this.levelUpCharacters();
+        await this.nextLevel();
+      } else {
+        await this.gameOver('Congratulations! You won! Max score: ' + this.maxScore);
+      }
+    }
+
+    if (!playersAlive) {
+      await this.gameOver('Game Over! Your score: ' + this.calculateScore());
+    }
+  }
+
+  async gameOver(message) {
+    this.isGameOver = true;
+    GamePlay.showMessage(message);
+    this.saveGameState();
+    this.lockGameBoard();
+  }
+
   getCharacterInfo(character) {
     return `🎖${character.level} ⚔${character.attack} 🛡${character.defence} ❤${character.health}`;
   }
 
   getMoveRange(character) {
-    switch(character.type) {
+    switch (character.type) {
       case 'swordsman':
       case 'undead':
         return 4;
@@ -72,7 +153,7 @@ export default class GameController {
   }
 
   getAttackRange(character) {
-    switch(character.type) {
+    switch (character.type) {
       case 'swordsman':
       case 'undead':
         return 1;
@@ -107,7 +188,7 @@ export default class GameController {
   }
 
   async onCellClick(index) {
-    if (this.currentTurn !== 'player') return;
+    if (this.currentTurn !== 'player' || this.isGameOver) return;
 
     const positionedCharacter = this.positionedCharacters.find(pc => pc.position === index);
 
@@ -141,8 +222,7 @@ export default class GameController {
 
         this.currentTurn = 'computer';
         await this.computerTurn();
-      }
-      else if (this.canAttack(this.selectedCharacter, index)) {
+      } else if (this.canAttack(this.selectedCharacter, index)) {
         const target = this.positionedCharacters.find(pc => pc.position === index);
 
         const damage = this.calculateDamage(this.selectedCharacter, target);
@@ -170,10 +250,10 @@ export default class GameController {
           console.error('Ошибка при атаке:', error);
           GamePlay.showError('Ошибка при атаке');
         }
-      }
-      else {
+      } else {
         GamePlay.showError('Невозможно выполнить это действие');
       }
+      await this.checkRoundEnd();
     }
   }
 
@@ -200,16 +280,13 @@ export default class GameController {
       if (!positionedCharacter && distance <= moveRange && this.isCellFree(index)) {
         this.gamePlay.selectCell(index, 'green');
         this.gamePlay.setCursor(cursors.pointer);
-      }
-      else if (this.canAttack(this.selectedCharacter, index)) {
+      } else if (this.canAttack(this.selectedCharacter, index)) {
         this.gamePlay.selectCell(index, 'red');
         this.gamePlay.setCursor(cursors.crosshair);
-      }
-      else {
+      } else {
         this.gamePlay.setCursor(cursors.notallowed);
       }
-    }
-    else if (positionedCharacter && this.isPlayerCharacter(positionedCharacter.character)) {
+    } else if (positionedCharacter && this.isPlayerCharacter(positionedCharacter.character)) {
       this.gamePlay.setCursor(cursors.pointer);
     }
   }
@@ -280,6 +357,47 @@ export default class GameController {
     }
 
     this.currentTurn = 'player';
+    await this.checkRoundEnd();
+  }
+
+  levelUpCharacters() {
+    this.positionedCharacters
+      .filter(pc => this.isPlayerCharacter(pc.character))
+      .forEach(pc => {
+        pc.character.levelUp();
+        // Восстанавливаем здоровье при повышении уровня
+        pc.character.health = Math.min(pc.character.level + 80, 100);
+      });
+  }
+
+  async nextLevel() {
+    try {
+      this.currentLevel += 1;
+      const themeIndex = (this.currentLevel - 1) % this.themes.length;
+      await this.gamePlay.drawUi(themes[this.themes[themeIndex]]);
+
+      const enemyTypes = [Vampire, Undead, Daemon];
+      this.enemyTeam = generateTeam(enemyTypes, this.currentLevel + 2, 2 + Math.floor(this.currentLevel / 2));
+
+      this.positionedCharacters = this.positionedCharacters.filter(
+        pc => this.isPlayerCharacter(pc.character)
+      );
+
+      const enemyPositions = [6, 7, 14, 15, 22, 23, 30, 31];
+      this.enemyTeam.characters.forEach((character, index) => {
+        const posIndex = index % enemyPositions.length;
+        this.positionedCharacters.push(new PositionedCharacter(
+          character,
+          enemyPositions[posIndex]
+        ));
+      });
+
+      await this.gamePlay.redrawPositions(this.positionedCharacters);
+      this.currentTurn = 'player';
+    } catch (error) {
+      console.error('Error in nextLevel:', error);
+      this.gamePlay.showError('Level transition failed');
+    }
   }
 }
 

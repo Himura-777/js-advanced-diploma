@@ -24,5 +24,19 @@ export default class Character {
     if (new.target === Character) {
       throw new Error('Cannot instantiate Character directly');
     }
+
+    for (let i = 1; i < level; i++) {
+      this.levelUp();
+    }
+  }
+
+  levelUp() {
+    this.level += 1;
+    const newHealth = this.level + 80;
+    this.health = Math.min(newHealth, 100);
+
+    const improvementFactor = (80 + this.health) / 100;
+    this.attack = Math.max(this.attack, Math.round(this.attack * improvementFactor));
+    this.defence = Math.max(this.defence, Math.round(this.defence * improvementFactor));
   }
 }
